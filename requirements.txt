@@ -1,0 +1,42 @@
+# LLM & Agents
+langchain
+langchain-community
+langchain-groq
+langchain-huggingface
+langchain-cohere
+langchain-tavily
+langgraph
+
+# Vector DB
+qdrant-client
+langchain-qdrant
+
+# Document Processing
+pypdf
+
+# Database
+sqlalchemy
+aiosqlite
+
+# API
+fastapi
+uvicorn
+python-multipart
+pydantic
+
+# Data & Charts
+pandas
+matplotlib
+yfinance
+
+# Utilities
+python-dotenv
+requests
+beautifulsoup4
+
+# Evaluation
+ragas
+
+# Testing
+pytest
+httpx
