@@ -25,11 +25,14 @@ class Settings:
     LLM_MODEL: str = "llama-3.3-70b-versatile"
     EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
 
-settings = Settings()
+    # Simple call counter
+    call_count = 0
 
-if __name__ == "__main__":
-    from config.settings import settings
-    print("✅ Settings loaded")
-    print(f"Model: {settings.LLM_MODEL}")
-    print(f"Groq key exists: {bool(settings.GROQ_API_KEY)}")
-    print(f"Tavily key exists: {bool(settings.TAVILY_API_KEY)}")
+    @staticmethod
+    def increment_calls(agent_name: str):
+        global call_count
+        Settings.call_count += 1
+        print(f"LLM CALL #{Settings.call_count} from {agent_name}")
+
+
+settings = Settings()

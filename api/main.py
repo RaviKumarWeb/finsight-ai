@@ -1,3 +1,4 @@
+import os
 import uuid
 import asyncio
 from fastapi import FastAPI, Depends
@@ -10,6 +11,8 @@ from database.connection import SessionLocal, create_tables
 from graph.research_graph import build_graph
 from database.crud import create_session, update_session,get_session,get_company_history, log_agent
 
+
+PORT = int(os.getenv("PORT", 8000))
 executor = ThreadPoolExecutor(max_workers=3)
 app = FastAPI()
 create_tables()

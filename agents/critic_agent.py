@@ -1,97 +1,112 @@
+import re
 from graph.state import ResearchState
 from database.crud import log_agent, update_session
 from database.connection import SessionLocal
 from config.settings import settings
 
 def extract_verdict(state):
-    # Extract Buy/Hold/Avoid from risk assessment
-    risk = state.get('risk_assessment', '') or ''
-    if 'Buy' in risk: return 'BUY'
-    if 'Avoid' in risk: return 'AVOID'
+    """Simple helper to find the final Buy/Hold/Avoid verdict."""
+    risk = str(state.get('risk_assessment', ''))
+    report = str(state.get('final_report', ''))
+    combined = (risk + report).upper()
+    
+    if 'AVOID' in combined: return 'AVOID'
+    if 'BUY' in combined: return 'BUY'
     return 'HOLD'
 
-def critic_agent(state: ResearchState,llm) -> ResearchState:
-    print(f"Critic Agent Runnig for: {state['company']}")
+def critic_agent(state: ResearchState, llm) -> ResearchState:
+    print(f"Critic Agent Running for: {state['company']}")
+    
+    # 1. Initialize essential state keys
+    state['errors'] = state.get('errors', [])
+    session_id = state.get('session_id', 'unknown')
+    
+    # Get current retry count
+    current_retry = state.get('retry_count', 0)
 
     try:
+        # 2. Fact-check the report against original data
+        settings.increment_calls("critic_agent")
         critic_summary = llm.invoke(f"""
-        You are a financial fact-checker.
-        REPORT TO CHECK: {state['final_report']}
-        ORIGINAL DATA: {state['financial_data']}
-
-        Compare the report against the original data.
-        List mismatches, give a confidence score (0.0 to 1.0), and a verdict.
+        You are a Financial Fact-Checker. 
+        Compare the Research Report against the Original Data provided.
         
-        Format:
-        MISMATCHES: [list]
-        CONFIDENCE: [number]
-        VERDICT: [Approved/Needs Revision]
+        [ORIGINAL DATA]
+        {state.get('financial_data', 'No data available')}
+        
+        [RESEARCH REPORT]
+        {state.get('final_report', 'No report available')}
+
+        Identify any mismatches in numbers, dates, or company names.
+        
+        Format your response EXACTLY like this:
+        MISMATCHES: [List specific errors or say 'None']
+        CONFIDENCE: [A number between 0.0 and 1.0 based on report accuracy]
+        VERDICT: [Approved or Needs Revision]
         """)
 
-        # After getting LLM response
         response_text = critic_summary.content
-        confidence = 0.8  # default to approved if parsing fails
-
-        for line in response_text.split('\n'):
-            if 'CONFIDENCE:' in line:
-                try:
-                    # Remove any markdown formatting
-                    clean = line.split(':')[1].strip()
-                    clean = clean.replace('*', '').replace('_', '').strip()
-                    confidence = float(clean)
-                    print(f"Confidence in Try: {confidence}")
-                    break
-                except:
-                    confidence = 0.8  # default to approved
-        
         state['critic_data'] = response_text
+        
+        # 3. Robust Parsing for Confidence Score
+        confidence = 0.8  # Default safety value
+        try:
+            # Look for "CONFIDENCE: 0.x" anywhere in the response
+            match = re.search(r"CONFIDENCE:\s*([\d\.]+)", response_text)
+            if match:
+                confidence = float(match.group(1))
+                print(f"Parsed Confidence: {confidence}")
+        except Exception as parse_err:
+            print(f"Confidence parsing failed: {parse_err}")
+
         state['confidence_score'] = confidence
 
-        if state['confidence_score'] > 0.8:
+        # 4. Determine Status and increment Retry Count logic
+        # Logic: If confidence is low, we only flag for a re-run if we haven't hit the limit
+        if confidence >= 0.8:
             state['status'] = "critic_approved"
         else:
-            state['status'] = "critic_flagged"
+            if current_retry >= 2:
+                # Force exit to prevent infinite loop / rate limits
+                state['status'] = "critic_approved" 
+                state['errors'].append("Max retries (2) reached. Ending with current report version.")
+            else:
+                state['status'] = "critic_flagged"
+                # INCREMENT: This informs the graph to loop back
+                state['retry_count'] = current_retry + 1
 
+        # 5. Update Database
         db = SessionLocal()
-        log_agent(db, state['session_id'], "critic_agent", "completed",state['critic_data'])
-        update_session(db,state['session_id'],confidence_score=state['confidence_score'],status=state['status'],final_report=state['final_report'],verdict=extract_verdict(state))
-        db.close()
+        try:
+            # Log the specific agent step
+            log_agent(db, session_id, "critic_agent", "completed", state['critic_data'])
+            
+            # Finalize the session data
+            update_session(
+                db, 
+                session_id, 
+                confidence_score=state['confidence_score'],
+                status=state['status'],
+                final_report=state.get('final_report'),
+                verdict=extract_verdict(state)
+            )
+        finally:
+            db.close()
 
-        print("Critic Agent Complete")
-        
+        print(f"Critic Agent Complete: {state['status']} (Next Retry Count: {state.get('retry_count', current_retry)})")
+
     except Exception as e:
-        state['errors'].append(f"Critic Agent Failed: Error {str(e)}")
-        state['critic_data'] = "Critic Data Unavaliable"
+        error_msg = f"Critic Agent Failed: {str(e)}"
+        state['errors'].append(error_msg)
+        state['critic_data'] = "Critic Analysis Unavailable"
         state['status'] = "critic_agent_failed"
+        
+        print(f"Error in Critic Agent: {error_msg}")
+        
+        db = SessionLocal()
+        try:
+            log_agent(db, session_id, "critic_agent", "failed", error_msg)
+        finally:
+            db.close()
 
     return state
-
-if __name__ == "__main__":
-    from langchain_groq import ChatGroq
-    from database.connection import create_tables
-    
-    create_tables()
-    
-    llm = ChatGroq(
-        model="llama-3.3-70b-versatile",
-        groq_api_key=settings.GROQ_API_KEY,
-        temperature=0
-    )
-    
-    test_state = {
-    "company": "Infosys",
-    "news": "Infosys Q3 revenue $5.1 billion, growth 1.7%",
-    "financial_data": "Revenue: $19.8B, EPS: $0.80, PE: 17.78",
-    "risk_assessment": "Risk 6/10, Recommendation: Hold",
-    "critic_data": None,
-    "final_report": "Infosys revenue was $20B with EPS of $1.50",
-    # ↑ deliberately wrong number — critic should catch this
-    "document_analysis": None,
-    "errors": [],
-    "status": "started",
-    "session_id": "test-123",
-    "confidence_score": None
-    }
-    
-    result = critic_agent(test_state, llm)
-    print(f"{result['critic_data']}\n Confidence Score {result['confidence_score']}")

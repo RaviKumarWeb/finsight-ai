@@ -1,67 +1,56 @@
+import time
 from langchain_tavily import TavilySearch
 from graph.state import ResearchState
 from database.crud import log_agent
 from database.connection import SessionLocal
 from config.settings import settings
 
-
 def news_agent(state: ResearchState, llm) -> ResearchState:
-    print(f" News Agent Running for: {state['company']}")
+    print(f"News Agent Running for: {state['company']}")
+    
+    state['errors'] = state.get('errors', [])
+    session_id = state.get('session_id', 'unknown')
 
     try:
+        # 1. Search for latest 2026 news
         search = TavilySearch(max_results=5)
+        search_query = f"{state['company']} latest news 2026 financial performance and business updates"
+        results = search.invoke(search_query)
 
-        results = search.invoke(f"{state['company']} latest news 2026 financial performance")
+        # 2. Summarize with LLM
+        summary_prompt = f"""
+        Summarize the latest news for {state['company']} in 4-5 key bullet points.
+        Focus strictly on 2026 financial impact, business performance, and major deals.
 
-        summary  = llm.invoke(f"""
-        Summarize these news about {state['company']} 
-        in 4-5 key bullet points.
-        Focus on financial impact and business performance.
-
-        News: {results}
-        """)
-
+        News Data: {results}
+        """
+        settings.increment_calls("news_agent")
+        summary = llm.invoke(summary_prompt)
         state['news'] = summary.content
         state['status'] = "news_complete"
 
+        # 3. Log Success to Database
         db = SessionLocal()
-        log_agent(db, state['session_id'], "news_agent", "completed",state['news'])
-        db.close()
+        try:
+            log_agent(db, session_id, "news_agent", "completed", state['news'])
+        finally:
+            db.close()
 
-        print("News Agent Complete")
-        
+        print(f"News Agent Complete for {state['company']}")
+
     except Exception as e:
-        state['errors'].append(f"News Agent Failed: Error {str(e)}")
-        state['news'] = "News Data Unavaliable."
+        error_msg = f"News Agent Failed: {str(e)}"
+        state['errors'].append(error_msg)
+        state['news'] = "News Data Unavailable."
         state['status'] = "news_agent_failed"
+        
+        print(f"Error in News Agent: {error_msg}")
+
+        # Save the error state to the database
+        db = SessionLocal()
+        try:
+            log_agent(db, session_id, "news_agent", "failed", error_msg)
+        finally:
+            db.close()
+
     return state
-
-
-if __name__ == "__main__":
-    from langchain_groq import ChatGroq
-    from database.connection import create_tables
-    
-    create_tables()
-    
-    llm = ChatGroq(
-        model="llama-3.3-70b-versatile",
-        groq_api_key=settings.GROQ_API_KEY,
-        temperature=0
-    )
-    
-    test_state = {
-        "company": "Infosis",
-        "news": None,
-        "financial_data": None,
-        "risk_assessment": None,
-        "critic_data": None,
-        "final_report": None,
-        "document_analysis": None,
-        "errors": [],
-        "status": "started",
-        "session_id": "test-123",
-        "confidence_score": None
-    }
-    
-    result = news_agent(test_state, llm)
-    print(result['news'])

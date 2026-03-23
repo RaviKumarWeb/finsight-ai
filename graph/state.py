@@ -12,4 +12,5 @@ class ResearchState(TypedDict):
     confidence_score: Optional[float]
     errors: List[str] 
     status: str
+    retry_count: int
 
