@@ -10,9 +10,6 @@ class Settings:
     # Search
     TAVILY_API_KEY: str = os.environ["TAVILY_API_KEY"]
     
-    # Reranking
-    COHERE_API_KEY: str = os.environ["COHERE_API_KEY"]
-    
     # Vector DB
     QDRANT_URL: str = os.getenv("QDRANT_URL", "http://localhost:6333")
     

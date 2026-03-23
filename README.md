@@ -137,7 +137,6 @@ docker run -p 8000:8000 --env-file .env finsight-ai
 ```bash
 GROQ_API_KEY=your_groq_key        # Free at console.groq.com
 TAVILY_API_KEY=your_tavily_key    # Free at tavily.com
-COHERE_API_KEY=your_cohere_key    # Free at cohere.com
 ```
 
 ## Example Request & Response
