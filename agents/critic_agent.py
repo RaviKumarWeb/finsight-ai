@@ -5,13 +5,19 @@ from database.connection import SessionLocal
 from config.settings import settings
 
 def extract_verdict(state):
-    """Simple helper to find the final Buy/Hold/Avoid verdict."""
     risk = str(state.get('risk_assessment', ''))
     report = str(state.get('final_report', ''))
     combined = (risk + report).upper()
     
-    if 'AVOID' in combined: return 'AVOID'
-    if 'BUY' in combined: return 'BUY'
+    # Count occurrences to determine strongest signal
+    buy_signals = combined.count('STRONG BUY') * 3 + combined.count('**BUY**') * 2 + combined.count('RECOMMENDATION: BUY')
+    avoid_signals = combined.count('STRONG AVOID') * 3 + combined.count('**AVOID**') * 2 + combined.count('RECOMMENDATION: AVOID')
+    hold_signals = combined.count('**HOLD**') * 2 + combined.count('RECOMMENDATION: HOLD')
+    
+    if buy_signals > avoid_signals and buy_signals > hold_signals:
+        return 'BUY'
+    if avoid_signals > buy_signals and avoid_signals > hold_signals:
+        return 'AVOID'
     return 'HOLD'
 
 def critic_agent(state: ResearchState, llm) -> ResearchState:

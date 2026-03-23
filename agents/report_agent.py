@@ -49,7 +49,14 @@ def report_agent(state: ResearchState, llm) -> ResearchState:
         (List risks with severity: High/Medium/Low)
 
         ## Investment Recommendation
-        (Explicitly state Buy, Hold, or Avoid with a 1-sentence reason)
+        State EXACTLY ONE of these verdicts on its own line:
+        RECOMMENDATION: BUY
+        or
+        RECOMMENDATION: HOLD  
+        or
+        RECOMMENDATION: AVOID
+
+        Then provide a 1-sentence reason.
         
         Ensure all numbers match the 'Financial Metrics' provided.
         """)
