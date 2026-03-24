@@ -83,6 +83,27 @@ async def research_company(request: ResearchRequest):
             "error": str(e)
         }
 
+@app.get("/sessions")
+def get_all_sessions(db: Session = Depends(get_db)):
+    from database.models import ResearchSession
+    sessions = db.query(ResearchSession).order_by(
+        ResearchSession.created_at.desc()
+    ).all()
+    return {
+        "total": len(sessions),
+        "sessions": [
+            {
+                "session_id": s.id,
+                "company": s.company,
+                "status": s.status,
+                "confidence": s.confidence_score,
+                "verdict": s.verdict,
+                "created_at": str(s.created_at)
+            }
+            for s in sessions
+        ]
+    }
+
 @app.get("/report/{session_id}")
 def get_report(session_id: str, db: Session = Depends(get_db)):
     session = get_session(db,session_id)
