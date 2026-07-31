@@ -4,7 +4,7 @@ A production-grade multi-agent financial research platform built with LangGraph 
 
 ## 🚀 Live Demo
 
-**API is live:** https://finsight-ai-production-c68f.up.railway.app
+**API is live:** https://finsight-ai-4i60.onrender.com/docs
 
 | Link | Description |
 |---|---|
